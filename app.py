@@ -10,25 +10,20 @@ from flask import Flask, Response, render_template_string, request, jsonify
 import requests
 from dotenv import load_dotenv
 
-# Carrega as variáveis do arquivo .env. 
 load_dotenv()
 
 # ==========================================
-# CONFIGURAÇÕES E CHAVES (Preencha aqui se o .env não funcionar)
+# CONFIGURAÇÕES E CHAVES
 # ==========================================
-HUBSPOT_ACCESS_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN", "COLE_SUA_CHAVE_DO_HUBSPOT_AQUI_SE_PRECISAR")
-APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "COLE_SUA_CHAVE_DO_APOLLO_AQUI_SE_PRECISAR")
+HUBSPOT_ACCESS_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN", "COLE_SUA_CHAVE_DO_HUBSPOT_AQUI")
+APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "COLE_SUA_CHAVE_DO_APOLLO_AQUI")
 
 JOEL_OWNER_ID = os.getenv("JOEL_OWNER_ID", "90392568")
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 JOEL_EMAIL_ADDRESS = os.getenv("JOEL_EMAIL_ADDRESS", "joel@startrh.io")
-JOEL_EMAIL_PASSWORD = os.getenv("JOEL_EMAIL_PASSWORD", "COLE_SUA_SENHA_DE_APP_AQUI_SE_PRECISAR")
-
-# Login do painel (Opcional - deixe vazio para acessar direto rodando local)
-APP_USER = os.getenv("APP_USER", "")
-APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+JOEL_EMAIL_PASSWORD = os.getenv("JOEL_EMAIL_PASSWORD", "COLE_SUA_SENHA_DE_APP_AQUI")
 
 HEADERS_HUBSPOT = {
     "Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}",
@@ -42,22 +37,16 @@ HEADERS_APOLLO = {
 }
 
 # ==========================================
-# TEMPLATE DE E-MAIL (HTML)
+# TEMPLATE DE E-MAIL (COM ASSINATURA)
 # ==========================================
 EMAIL_ASSUNTO = "{empresa} + START RH - Parceria Estratégica em Recrutamento e Seleção"
 EMAIL_CORPO_HTML = """
 <p>Olá {nome}, tudo bem?</p>
-
 <p>Me chamo Joel e faço parte da <strong>Start RH</strong>, consultoria de Recrutamento e Seleção que apoia empresas a contratar com mais velocidade e assertividade.</p>
-
 <p>Atuamos em vagas pontuais, executivas e técnicas, e também em projetos de alta demanda. Só na <strong>Cielo</strong>, fechamos mais de <strong>1.200 posições</strong>. Também somos parceiros de marcas como <strong>Porto Seguro, Mapfre e Natura</strong>.</p>
-
 <p>E temos um diferencial: oferecemos <strong>garantia de assertividade</strong> nas contratações. Se a escolha não der certo, fazemos a reposição sem custo.</p>
-
 <p>Podemos ter uma conversa rápida de 15 minutos para eu te apresentar nosso projeto?</p>
-
 <p>Me diga qual o melhor dia e horário para você ou, se preferir, <a href="https://meetings.hubspot.com/joel-oliveira?uuid=3dae6946-5a35-483c-a5ce-f14e4c42ae76" style="color: #F5A623; font-weight: bold; text-decoration: underline;">escolha direto aqui na minha agenda</a>.</p>
-
 <p>Abraço,</p>
 
 <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 13px; color: #333333; margin-top: 16px;">
@@ -87,8 +76,7 @@ EMAIL_CORPO_HTML = """
 # FUNÇÕES DE LÓGICA E APIS
 # ==========================================
 def limpar_dominio(url: str) -> str:
-    if not url:
-        return ""
+    if not url: return ""
     d = url.lower().strip()
     d = d.replace("https://", "").replace("http://", "").replace("www.", "")
     return d.split("/")[0]
@@ -103,8 +91,10 @@ def adicionar_dias_uteis(data_inicial, dias_uteis_prazo):
     return data_atual
 
 def disparar_email_joel(email_destino, nome_contato, nome_empresa):
-    if not JOEL_EMAIL_PASSWORD or JOEL_EMAIL_PASSWORD == "COLE_SUA_SENHA_DE_APP_AQUI_SE_PRECISAR":
-        return False, "E-mail não configurado"
+    print(f"   [E-mail] Conectando ao Gmail para enviar a {email_destino}...")
+    if not JOEL_EMAIL_PASSWORD or JOEL_EMAIL_PASSWORD == "COLE_SUA_SENHA_DE_APP_AQUI":
+        print("   [E-mail ERRO] Senha do Gmail não configurada!")
+        return False, "Senha do Gmail não configurada"
     try:
         assunto = EMAIL_ASSUNTO.format(nome=nome_contato, empresa=nome_empresa)
         corpo = EMAIL_CORPO_HTML.format(nome=nome_contato, empresa=nome_empresa)
@@ -113,364 +103,230 @@ def disparar_email_joel(email_destino, nome_contato, nome_empresa):
         msg["To"] = email_destino
         msg["Subject"] = assunto
         msg.attach(MIMEText(corpo, "html"))
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
             server.starttls()
             server.login(JOEL_EMAIL_ADDRESS, JOEL_EMAIL_PASSWORD)
             server.send_message(msg)
+        print("   [E-mail SUCESSO]")
         return True, "Enviado com sucesso"
     except Exception as e:
+        print(f"   [E-mail ERRO] {e}")
         return False, str(e)
 
-def criar_cadencia_tarefas_hubspot(contact_id, bdr_id, bdr_name, nome_lead, empresa_lead):
+def criar_cadencia_tarefas_hubspot(contact_id, bdr_id, nome_lead, empresa_lead):
+    print("   [HubSpot] Criando 8 tarefas da cadência...")
     url = "https://api.hubapi.com/crm/v3/objects/tasks"
     tarefas = [
-        {"titulo": "(Estratégia Vitor) Conexão - LinkedIn", "dias_prazo": 1, "tipo": "TODO", "status": "NOT_STARTED"},
+        {"titulo": "(Estratégia Vitor) Conexão - LinkedIn", "dias_prazo": 1, "tipo": "TODO"},
         {"titulo": "(Estratégia Vitor) Primeiro E-mail (Problema)", "dias_prazo": 1, "tipo": "EMAIL", "status": "COMPLETED"},
-        {"titulo": "(Estratégia Vitor) Primeira Ligação - Referencia o E-mail", "dias_prazo": 3, "tipo": "CALL", "status": "NOT_STARTED"},
-        {"titulo": "(Estratégia Vitor) Segundo E-mail - Prova Social ou Dado de Mercado", "dias_prazo": 5, "tipo": "EMAIL", "status": "NOT_STARTED"},
-        {"titulo": "(Estratégia Vitor) Linkedin - Comentário ou Mensagem", "dias_prazo": 8, "tipo": "TODO", "status": "NOT_STARTED"},
-        {"titulo": "(Estratégia Vitor) Segunda Ligação - Ângulo Diferente", "dias_prazo": 11, "tipo": "CALL", "status": "NOT_STARTED"},
-        {"titulo": "(Estratégia Vitor) WhatsApp - Só com Sinal Prévio", "dias_prazo": 15, "tipo": "TODO", "status": "NOT_STARTED"},
-        {"titulo": "(Estratégia Vitor) Break Up E-mail", "dias_prazo": 19, "tipo": "EMAIL", "status": "NOT_STARTED"},
+        {"titulo": "(Estratégia Vitor) Primeira Ligação - Referencia o E-mail", "dias_prazo": 3, "tipo": "CALL"},
+        {"titulo": "(Estratégia Vitor) Segundo E-mail - Prova Social", "dias_prazo": 5, "tipo": "EMAIL"},
+        {"titulo": "(Estratégia Vitor) Linkedin - Comentário", "dias_prazo": 8, "tipo": "TODO"},
+        {"titulo": "(Estratégia Vitor) Segunda Ligação", "dias_prazo": 11, "tipo": "CALL"},
+        {"titulo": "(Estratégia Vitor) WhatsApp", "dias_prazo": 15, "tipo": "TODO"},
+        {"titulo": "(Estratégia Vitor) Break Up E-mail", "dias_prazo": 19, "tipo": "EMAIL"},
     ]
     agora_utc = datetime.now(timezone.utc)
     for t in tarefas:
-        data_vencimento = adicionar_dias_uteis(agora_utc, t["dias_prazo"])
-        vencimento_ms = int(data_vencimento.timestamp() * 1000)
+        vencimento_ms = int(adicionar_dias_uteis(agora_utc, t["dias_prazo"]).timestamp() * 1000)
         payload = {
             "properties": {
-                "hs_task_subject": f"{t['titulo']} | {nome_lead} ({empresa_lead})",
+                "hs_task_subject": f"{t['titulo']} | {nome_lead}",
                 "hs_task_status": t.get("status", "NOT_STARTED"),
                 "hs_task_type": t["tipo"],
                 "hubspot_owner_id": str(bdr_id),
                 "hs_timestamp": vencimento_ms,
             },
-            "associations": [
-                {
-                    "to": {"id": str(contact_id)},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 204}],
-                }
-            ],
+            "associations": [{"to": {"id": str(contact_id)}, "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 204}]}],
         }
         try:
-            requests.post(url, headers=HEADERS_HUBSPOT, json=payload)
-        except Exception:
-            pass
+            requests.post(url, headers=HEADERS_HUBSPOT, json=payload, timeout=5)
+        except: pass
 
 def obter_ou_criar_empresa_hubspot(nome, dominio=""):
-    if dominio:
-        url_search = "https://api.hubapi.com/crm/v3/objects/companies/search"
-        payload_search = {
-            "filterGroups": [{"filters": [{"propertyName": "domain", "operator": "EQ", "value": dominio}]}]
-        }
-        res = requests.post(url_search, headers=HEADERS_HUBSPOT, json=payload_search)
-        if res.status_code == 200 and res.json().get("results"):
-            return res.json()["results"][0]["id"]
-
+    print(f"   [HubSpot] Buscando/Criando empresa '{nome}'...")
     url_create = "https://api.hubapi.com/crm/v3/objects/companies"
     payload_create = {
-        "properties": {
-            "name": nome,
-            "domain": dominio,
-            "description": "Adicionado via Painel do BDR.",
-            "hubspot_owner_id": str(JOEL_OWNER_ID),
-            "lifecyclestage": "lead",
-        }
+        "properties": {"name": nome, "domain": dominio, "hubspot_owner_id": str(JOEL_OWNER_ID), "lifecyclestage": "lead"}
     }
-    res_c = requests.post(url_create, headers=HEADERS_HUBSPOT, json=payload_create)
-    if res_c.status_code == 201:
-        return res_c.json().get("id")
+    try:
+        res_c = requests.post(url_create, headers=HEADERS_HUBSPOT, json=payload_create, timeout=10)
+        if res_c.status_code in [200, 201]:
+            return res_c.json().get("id")
+    except Exception as e:
+        print(f"   [HubSpot ERRO REDE]: {e}")
     return None
 
 def obter_ou_criar_contato_hubspot(email, nome="", sobrenome="", cargo="", linkedin=""):
-    url_search = "https://api.hubapi.com/crm/v3/objects/contacts/search"
-    payload_search = {
-        "filterGroups": [{"filters": [{"propertyName": "email", "operator": "EQ", "value": email}]}]
-    }
-    res = requests.post(url_search, headers=HEADERS_HUBSPOT, json=payload_search)
-    if res.status_code == 200 and res.json().get("results"):
-        contact_id = res.json()["results"][0]["id"]
-        if linkedin:
-            url_update = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}"
-            payload_update = {"properties": {"hs_linkedin_url": str(linkedin)}}
-            try:
-                requests.patch(url_update, headers=HEADERS_HUBSPOT, json=payload_update)
-            except Exception:
-                pass
-        return contact_id
-    
+    print(f"   [HubSpot] Buscando/Criando contato '{email}'...")
     url_create = "https://api.hubapi.com/crm/v3/objects/contacts"
     payload_create = {
         "properties": {
-            "email": str(email),
-            "firstname": str(nome),
-            "lastname": str(sobrenome),
-            "jobtitle": str(cargo),
-            "hs_linkedin_url": str(linkedin) if linkedin else "",
+            "email": str(email), "firstname": str(nome), "lastname": str(sobrenome),
+            "jobtitle": str(cargo), "hs_linkedin_url": str(linkedin) if linkedin else "",
             "hubspot_owner_id": str(JOEL_OWNER_ID),
         }
     }
-    res_c = requests.post(url_create, headers=HEADERS_HUBSPOT, json=payload_create)
-    if res_c.status_code == 201:
-        return res_c.json().get("id")
+    try:
+        res_c = requests.post(url_create, headers=HEADERS_HUBSPOT, json=payload_create, timeout=10)
+        if res_c.status_code in [200, 201]:
+            return res_c.json().get("id")
+        elif res_c.status_code == 409:
+            return res_c.json().get("message", "").split("Id: ")[-1]
+    except: pass
     return None
 
 def associar_contato_empresa(contact_id, company_id):
     url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}/associations/companies/{company_id}/contact_to_company"
-    requests.put(url, headers=HEADERS_HUBSPOT)
-
-def registrar_email_enviado_no_hubspot(contact_id, assunto, corpo_html):
-    url = "https://api.hubapi.com/crm/v3/objects/emails"
-    timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    payload = {
-        "properties": {
-            "hs_email_subject": assunto,
-            "hs_email_text": corpo_html,
-            "hs_email_status": "SENT",
-            "hs_timestamp": timestamp_ms,
-            "hubspot_owner_id": str(JOEL_OWNER_ID),
-        },
-        "associations": [
-            {
-                "to": {"id": contact_id},
-                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 198}],
-            }
-        ],
-    }
-    requests.post(url, headers=HEADERS_HUBSPOT, json=payload)
+    try: requests.put(url, headers=HEADERS_HUBSPOT, timeout=5)
+    except: pass
 
 def buscar_contatos_apollo(termo_empresa, limite=3):
-    if not APOLLO_API_KEY or APOLLO_API_KEY == "COLE_SUA_CHAVE_DO_APOLLO_AQUI_SE_PRECISAR":
-        return [], "ERRO CRÍTICO: Chave de API do Apollo ausente no .env ou no código!", True
+    print(f"\n🚀 [Apollo] Buscando decisores em: '{termo_empresa}' (Limite: {limite})")
+    if not APOLLO_API_KEY or APOLLO_API_KEY == "COLE_SUA_CHAVE_DO_APOLLO_AQUI":
+        return [], "ERRO CRÍTICO: Chave de API do Apollo ausente!", True
 
     url = "https://api.apollo.io/v1/mixed_people/api_search"
     termo_limpo = limpar_dominio(str(termo_empresa)) if "." in str(termo_empresa) else str(termo_empresa).strip()
 
     payload = {
         "api_key": APOLLO_API_KEY,
-        "person_titles": [
-            "RH", "HR", "Recrutamento", "Recruiter", "Talent Acquisition",
-            "Recursos Humanos", "Gente e Gestão", "Gente e Gestao",
-            "Head de RH", "Diretor de RH", "Gerente de RH", "HRBP",
-            "VP of People", "Head of People", "Chief People Officer",
-        ],
+        "person_titles": ["RH", "HR", "Recrutamento", "Recruiter", "Talent Acquisition", "Gente"],
         "person_locations": ["Brazil"],
-        "per_page": 100,
+        "per_page": 20,
     }
-
-    if "." in termo_limpo:
-        payload["q_organization_domains"] = termo_limpo
-    else:
-        payload["q_keywords"] = termo_limpo
+    if "." in termo_limpo: payload["q_organization_domains"] = termo_limpo
+    else: payload["q_keywords"] = termo_limpo
 
     contatos_validos = []
     try:
-        res = requests.post(url, headers=HEADERS_APOLLO, json=payload)
-        
+        res = requests.post(url, headers=HEADERS_APOLLO, json=payload, timeout=10)
         if res.status_code != 200:
-            return [], f"Apollo rejeitou a busca (Erro {res.status_code}). Detalhe: {res.text}", True
+            print(f"❌ [Apollo ERRO]: {res.status_code} - {res.text}")
+            return [], f"Apollo rejeitou a busca (Erro {res.status_code}).", True
 
         pessoas = res.json().get("people") or []
-
         for p in pessoas:
             email = p.get("email")
-            linkedin = p.get("linkedin_url")
-            
             if not email and p.get("id"):
-                url_match = "https://api.apollo.io/v1/people/match"
                 try:
-                    p_match = requests.post(url_match, headers=HEADERS_APOLLO, json={"api_key": APOLLO_API_KEY, "id": p.get("id")})
-                    if p_match.status_code == 200:
-                        det = p_match.json().get("person") or {}
-                        email = det.get("email")
-                        linkedin = linkedin or det.get("linkedin_url")
-                except Exception:
-                    pass
+                    p_match = requests.post("https://api.apollo.io/v1/people/match", headers=HEADERS_APOLLO, json={"api_key": APOLLO_API_KEY, "id": p.get("id")}, timeout=5)
+                    if p_match.status_code == 200: email = (p_match.json().get("person") or {}).get("email")
+                except: pass
 
             if email and "@" in email:
+                org_obj = p.get("organization") or {}
+                
                 contatos_validos.append({
-                    "email": email,
-                    "nome": p.get("first_name", ""),
-                    "sobrenome": p.get("last_name", ""),
-                    "cargo": p.get("title", ""),
-                    "linkedin": linkedin or "",
-                    "empresa_nome": p.get("organization", {}).get("name", termo_empresa),
-                    "empresa_dominio": p.get("organization", {}).get("primary_domain", ""),
+                    "email": email, "nome": p.get("first_name", ""), "sobrenome": p.get("last_name", ""),
+                    "cargo": p.get("title", ""), "linkedin": p.get("linkedin_url", ""),
+                    "empresa_nome": org_obj.get("name") or str(termo_empresa),
+                    "empresa_dominio": org_obj.get("primary_domain") or "",
                 })
             
-            if len(contatos_validos) >= limite:
-                break
+            if len(contatos_validos) >= limite: break
                 
-        status_msg = f"Encontrei {len(contatos_validos)} pessoa(s) de {limite} requisitada(s)."
-        return contatos_validos, status_msg, False
-            
+        return contatos_validos, f"Encontrei {len(contatos_validos)} pessoa(s).", False
     except Exception as e:
-        return [], f"Falha de conexão com Apollo: {str(e)}", True
-
+        print(f"❌ [Apollo ERRO REDE]: {e}")
+        return [], str(e), True
 
 # ==========================================
 # SERVIDOR FLASK E FRONTEND
 # ==========================================
 app = Flask(__name__)
 
-def _pedir_login():
-    return Response("Acesso restrito.", 401, {"WWW-Authenticate": 'Basic realm="Start RH - Painel BDR"'})
-
-@app.before_request
-def exigir_login():
-    # Só exige senha se APP_USER e APP_PASSWORD estiverem preenchidos no ambiente
-    if APP_USER and APP_PASSWORD:
-        auth = request.authorization
-        if not auth:
-            return _pedir_login()
-        user_ok = hmac.compare_digest(auth.username or "", APP_USER)
-        pass_ok = hmac.compare_digest(auth.password or "", APP_PASSWORD)
-        if not (user_ok and pass_ok):
-            return _pedir_login()
-
-
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Start RH - Prospecção do BDR</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center p-6">
-    <div class="max-w-4xl w-full bg-gray-800 rounded-xl shadow-2xl border border-gray-700 p-8 mt-6">
-        
-        <div class="flex items-center justify-between border-b border-gray-700 pb-6 mb-6">
-            <div>
-                <h1 class="text-2xl font-bold text-amber-500 flex items-center gap-2">
-                    <i class="fa-solid fa-rocket"></i> Start RH - Enriquecimento Manual
-                </h1>
-                <p class="text-sm text-gray-400 mt-1">Dica de Ouro: Use os domínios (ex: apple.com, totvs.com.br) para resultados precisos!</p>
-            </div>
-            <div class="text-right">
-                <span class="inline-block bg-amber-500/10 text-amber-400 text-xs px-3 py-1 rounded-full border border-amber-500/20 font-mono">
-                    Owner: Joel Costa (90392568)
-                </span>
-            </div>
-        </div>
-
+    <div class="max-w-4xl w-full bg-gray-800 rounded-xl shadow-2xl p-8 mt-6">
+        <h1 class="text-2xl font-bold text-amber-500 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-rocket"></i> Start RH - Enriquecimento Manual
+        </h1>
         <div class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">
                     Lista de Empresas ou Domínios (Separados por vírgula ou linha):
                 </label>
-                <textarea id="empresasInput" rows="5" 
-                    class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-gray-100 focus:outline-none focus:border-amber-500 transition font-mono text-sm"
-                    placeholder="Exemplo: apple.com, totvs.com.br, lg.com, lenovo.com"></textarea>
+                <textarea id="empresasInput" rows="3" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-gray-100" placeholder="Ex: totvs.com.br, nubank.com.br"></textarea>
             </div>
-
             <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">
-                    Quantidade máxima de contatos desejada por empresa:
-                </label>
-                <input type="number" id="limiteInput" value="3" min="1" max="100"
-                    class="w-32 bg-gray-900 border border-gray-700 rounded-lg p-2 text-gray-100 focus:outline-none focus:border-amber-500 transition font-mono text-sm">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Contatos por empresa:</label>
+                <input type="number" id="limiteInput" value="1" min="1" max="10" class="w-24 bg-gray-900 border border-gray-700 rounded-lg p-2 text-gray-100">
             </div>
-
-            <button id="btnProcessar" onclick="processarEmpresas()" 
-                class="w-full bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+            <button id="btnProcessar" onclick="processar()" class="w-full bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold py-3 rounded-lg mt-4 transition">
                 <i class="fa-solid fa-bolt"></i> Iniciar Prospecção
             </button>
         </div>
-
-        <div id="loading" class="hidden my-8 text-center">
-            <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-amber-500 border-t-transparent"></div>
-            <p class="text-gray-400 text-sm mt-3 animate-pulse">Consultando Apollo, criando no HubSpot e enviando e-mails...</p>
+        <div id="loading" class="hidden mt-6 text-center text-amber-400 animate-pulse font-bold">
+            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>
+            Processando empresas... VEJA O TERMINAL DO VS CODE PARA ACOMPANHAR!
         </div>
-
-        <div id="resultadoContainer" class="hidden mt-8 border-t border-gray-700 pt-6">
-            <h2 class="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-list-check text-amber-500"></i> Relatório da Execução:
-            </h2>
-            <div id="logList" class="space-y-4 font-mono text-xs"></div>
-        </div>
+        <div id="logList" class="mt-6 space-y-4 font-mono text-sm"></div>
     </div>
-
     <script>
-        async function processarEmpresas() {
-            const input = document.getElementById('empresasInput').value.trim();
-            const limite = parseInt(document.getElementById('limiteInput').value) || 3;
-            
-            if (!input) return alert('Por favor, digite ao menos uma empresa.');
-
+        async function processar() {
             const btn = document.getElementById('btnProcessar');
-            const loading = document.getElementById('loading');
-            const resultadoContainer = document.getElementById('resultadoContainer');
-            const logList = document.getElementById('logList');
-
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
-            loading.classList.remove('hidden');
-            resultadoContainer.classList.add('hidden');
-            logList.innerHTML = '';
-
+            btn.disabled = true; btn.classList.add('opacity-50');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('logList').innerHTML = '';
+            
             try {
-                const response = await fetch('/api/enriquecer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ empresas: input, limite: limite })
+                const res = await fetch('/api/enriquecer', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ empresas: document.getElementById('empresasInput').value, limite: document.getElementById('limiteInput').value })
                 });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Erro ${response.status} no servidor. Veja o terminal para mais detalhes.`);
-                }
                 
-                const data = await response.json();
+                const data = await res.json();
+                document.getElementById('loading').classList.add('hidden');
+                btn.disabled = false; btn.classList.remove('opacity-50');
                 
-                loading.classList.add('hidden');
-                resultadoContainer.classList.remove('hidden');
-
                 if (data.status === 'success') {
                     data.resultados.forEach(item => {
                         let htmlItem = `<div class="bg-gray-900 border border-gray-700 rounded-lg p-4">`;
-                        htmlItem += `<div class="text-sm font-bold text-amber-400 border-b border-gray-800 pb-2 mb-2 flex justify-between items-center">
+                        htmlItem += `<div class="font-bold text-amber-400 border-b border-gray-800 pb-2 mb-2 flex justify-between">
                             <span><i class="fa-regular fa-building"></i> ${item.empresa_input}</span>
-                            <span class="text-gray-400 text-xs">${item.hubspot_id ? 'HubSpot ID: ' + item.hubspot_id : 'Sem cadastro no HubSpot'}</span>
+                            <span class="text-gray-400 text-xs">${item.hubspot_id ? 'ID: ' + item.hubspot_id : 'Sem CRM'}</span>
                         </div>`;
 
-                        if (item.status_msg) {
-                            const badgeClass = item.is_erro ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' : 'text-amber-300 bg-amber-500/10 border-amber-500/20';
-                            htmlItem += `<p class="text-xs p-2 rounded border mb-2 ${badgeClass}"><i class="fa-solid fa-circle-info"></i> ${item.status_msg}</p>`;
-                        }
+                        const badgeClass = item.is_erro ? 'text-rose-400 bg-rose-500/10' : 'text-emerald-400 bg-emerald-500/10';
+                        htmlItem += `<p class="text-xs p-2 rounded mb-2 ${badgeClass}">${item.status_msg}</p>`;
 
                         if (item.contatos && item.contatos.length > 0) {
-                            htmlItem += `<ul class="space-y-2 mt-2">`;
+                            htmlItem += `<ul class="space-y-2">`;
                             item.contatos.forEach(c => {
-                                htmlItem += `<li class="flex items-center justify-between text-gray-300 bg-gray-800/50 p-2 rounded">
+                                htmlItem += `<li class="flex items-center justify-between text-gray-300 bg-gray-800/50 p-2 rounded border border-gray-700">
                                     <div>
-                                        <strong class="text-gray-100">${c.nome} ${c.sobrenome}</strong> (${c.cargo}) - <span class="text-gray-400">${c.email}</span>
-                                        ${c.linkedin ? '<br><a href="' + c.linkedin + '" target="_blank" class="text-amber-500 underline mt-1 inline-block"><i class="fa-brands fa-linkedin"></i> LinkedIn</a>' : ''}
+                                        <strong class="text-gray-100">${c.nome} ${c.sobrenome}</strong> (${c.cargo}) <br> <span class="text-gray-400">${c.email}</span>
+                                        ${c.linkedin ? `<br><a href="${c.linkedin}" target="_blank" class="text-sky-400 hover:text-sky-300 mt-1 inline-block"><i class="fa-brands fa-linkedin"></i> LinkedIn</a>` : ''}
                                     </div>
                                     <div class="text-right">
                                         ${c.email_enviado 
-                                            ? '<span class="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded"><i class="fa-solid fa-check"></i> E-mail & Tarefas OK</span>' 
-                                            : '<span class="text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded"><i class="fa-solid fa-xmark"></i> Contato OK (Erro E-mail)</span>'}
+                                            ? '<span class="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded"><i class="fa-solid fa-check"></i> Enviado</span>' 
+                                            : '<span class="text-rose-400 bg-rose-500/10 px-2 py-1 rounded"><i class="fa-solid fa-xmark"></i> Erro Email</span>'}
                                     </div>
                                 </li>`;
                             });
                             htmlItem += `</ul>`;
                         }
                         htmlItem += `</div>`;
-                        logList.innerHTML += htmlItem;
+                        document.getElementById('logList').innerHTML += htmlItem;
                     });
-                } else {
-                    logList.innerHTML = `<p class="text-rose-500 p-3 bg-rose-500/10 rounded border border-rose-500/20"><i class="fa-solid fa-bomb"></i> Erro no servidor: ${data.message}</p>`;
+                } else { 
+                    document.getElementById('logList').innerHTML = `<div class='p-4 bg-rose-900/50 text-rose-300 font-bold border border-rose-500 rounded'>❌ O CÓDIGO QUEBROU:<br><br>${data.message}</div>`;
                 }
-            } catch (err) {
-                loading.classList.add('hidden');
-                resultadoContainer.classList.remove('hidden');
-                logList.innerHTML = `<p class="text-rose-500 p-3 bg-rose-500/10 rounded border border-rose-500/20"><i class="fa-solid fa-triangle-exclamation"></i> ${err.message}</p>`;
-            } finally {
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } catch(e) {
+                document.getElementById('loading').classList.add('hidden');
+                btn.disabled = false; btn.classList.remove('opacity-50');
+                document.getElementById('logList').innerHTML = `<div class='text-rose-500 p-4 border border-rose-500 rounded'>Erro grave de conexão do navegador com o Python: ${e}</div>`;
             }
         }
     </script>
@@ -479,111 +335,61 @@ HTML_TEMPLATE = """
 """
 
 @app.route("/")
-def index():
-    return render_template_string(HTML_TEMPLATE)
+def index(): return render_template_string(HTML_TEMPLATE)
 
 @app.route("/api/enriquecer", methods=["POST"])
 def api_enriquecer():
     try:
         data = request.json or {}
-        empresas_raw = data.get("empresas", "")
+        empresas_str = str(data.get("empresas", ""))
+        empresas = [e.strip() for e in empresas_str.replace("\n", ",").split(",") if e.strip()]
         
-        # Tratamento de segurança caso o campo empresas venha em formato de lista em vez de texto
-        if isinstance(empresas_raw, list):
-            empresas_raw = ",".join([str(item) for item in empresas_raw])
-        elif not isinstance(empresas_raw, str):
-            empresas_raw = str(empresas_raw)
-        
-        try:
-            limite = max(1, int(data.get("limite", 3)))
-        except (TypeError, ValueError):
-            limite = 3
-
-        lista_empresas = [e.strip() for e in empresas_raw.replace("\n", ",").split(",") if e.strip()]
+        try: limite = int(data.get("limite") or 1)
+        except: limite = 1
 
         resultados = []
 
-        for item in lista_empresas:
-            contatos, status_msg, is_erro_critico = buscar_contatos_apollo(item, limite=limite)
-            
-            if is_erro_critico or not contatos:
-                resultados.append({
-                    "empresa_input": item,
-                    "hubspot_id": None,
-                    "status_msg": status_msg,
-                    "is_erro": is_erro_critico,
-                    "contatos": []
-                })
+        for item in empresas:
+            contatos, status_msg, erro = buscar_contatos_apollo(item, limite)
+            if erro or not contatos:
+                resultados.append({"empresa_input": item, "status_msg": status_msg, "is_erro": erro, "contatos": []})
                 continue
 
-            nome_empresa = contatos[0]["empresa_nome"] or item
-            dominio_empresa = limpar_dominio(contatos[0]["empresa_dominio"] or (item if "." in item else ""))
-
+            nome_empresa = contatos[0]["empresa_nome"]
+            dominio_empresa = limpar_dominio(contatos[0]["empresa_dominio"] or item)
             company_id = obter_ou_criar_empresa_hubspot(nome_empresa, dominio_empresa)
+            
             contatos_resultado = []
 
             for c in contatos:
-                nome_contato = c["nome"] or "Olá"
-                contact_id = obter_ou_criar_contato_hubspot(
-                    email=c["email"],
-                    nome=c["nome"],
-                    sobrenome=c["sobrenome"],
-                    cargo=c["cargo"],
-                    linkedin=c["linkedin"],
-                )
-
+                contact_id = obter_ou_criar_contato_hubspot(c["email"], c["nome"], c["sobrenome"], c["cargo"], c["linkedin"])
                 enviou = False
+                
                 if contact_id:
-                    if company_id:
-                        associar_contato_empresa(contact_id, company_id)
-                    
-                    enviou, msg_status = disparar_email_joel(c["email"], nome_contato, nome_empresa)
-                    
-                    if enviou:
-                        registrar_email_enviado_no_hubspot(
-                            contact_id, 
-                            EMAIL_ASSUNTO.format(nome=nome_contato, empresa=nome_empresa), 
-                            EMAIL_CORPO_HTML.format(nome=nome_contato, empresa=nome_empresa)
-                        )
-
-                    criar_cadencia_tarefas_hubspot(
-                        contact_id=contact_id,
-                        bdr_id=JOEL_OWNER_ID,
-                        bdr_name="Joel",
-                        nome_lead=nome_contato,
-                        empresa_lead=nome_empresa,
-                    )
+                    if company_id: associar_contato_empresa(contact_id, company_id)
+                    enviou, _ = disparar_email_joel(c["email"], c["nome"], nome_empresa)
+                    criar_cadencia_tarefas_hubspot(contact_id, JOEL_OWNER_ID, c["nome"], nome_empresa)
 
                 contatos_resultado.append({
-                    "nome": c["nome"],
-                    "sobrenome": c["sobrenome"],
-                    "cargo": c["cargo"],
-                    "email": c["email"],
-                    "linkedin": c["linkedin"],
-                    "email_enviado": enviou
+                    "nome": c["nome"], "sobrenome": c["sobrenome"], "cargo": c["cargo"], 
+                    "email": c["email"], "linkedin": c["linkedin"], "email_enviado": enviou
                 })
 
             resultados.append({
-                "empresa_input": nome_empresa,
+                "empresa_input": nome_empresa, 
                 "hubspot_id": company_id,
-                "status_msg": status_msg,
+                "status_msg": status_msg + " Cadastrado no CRM com sucesso.", 
                 "is_erro": False,
                 "contatos": contatos_resultado
             })
-
+            
         return jsonify({"status": "success", "resultados": resultados})
-
+        
     except Exception as e:
-        # Se ocorrer um erro 500, isto vai imprimir exatamente a causa no terminal para descobrirmos
-        print("\n--- ERRO DETECTADO NO BACKEND ---")
-        traceback.print_exc()
-        print("----------------------------------\n")
-        return jsonify({"status": "error", "message": f"Erro de execução no backend: {str(e)}"}), 500
-
+        erro_completo = traceback.format_exc()
+        print(f"\n❌ ERRO DETECTADO:\n{erro_completo}\n")
+        return jsonify({"status": "error", "message": str(e) + " | Olhe o terminal do VS Code para ver a linha exata!"})
 
 if __name__ == "__main__":
-    porta = int(os.getenv("PORT", "5000"))
     print("\n--- SERVIDOR LOCAL DA START RH INICIADO ---")
-    print(f"Acesse no navegador: http://localhost:{porta}\n")
-    # debug=True ativado para ajudar a ver qualquer problema futuro no terminal
-    app.run(host="127.0.0.1", port=porta, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)

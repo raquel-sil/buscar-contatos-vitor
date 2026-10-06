@@ -43,15 +43,17 @@ EMAIL_ASSUNTO = "{empresa} + START RH - Parceria Estratégica em Recrutamento e 
 EMAIL_CORPO_HTML = """
 <p>Olá {nome}, tudo bem?</p>
 
-<p>Acompanhando o mercado, notei que a {empresa} está com diversas oportunidades em aberto e em ritmo forte de crescimento. Acelerar a atração e contratação dos profissionais certos costuma ser um grande desafio para os times de Gente & Gestão.</p>
+<p>Me chamo Joel e faço parte da <strong>Start RH</strong>, consultoria de Recrutamento e Seleção que apoia empresas a contratar com mais velocidade e assertividade.</p>
 
-<p>É exatamente isso que resolvemos na Start RH. Somos especializados em Recrutamento e Seleção de alta performance, conectando sua empresa aos melhores talentos do mercado com agilidade e assertividade.</p>
+<p>Atuamos em vagas pontuais, executivas e técnicas, e também em projetos de alta demanda. Só na <strong>Cielo</strong>, fechamos mais de <strong>1.200 posições</strong>. Também somos parceiros de marcas como <strong>Porto Seguro, Mapfre e Natura</strong>.</p>
 
-<p>Hoje conduzimos projetos de recrutamento para grandes marcas do mercado nacional, reduzindo drasticamente o tempo de fechamento de vagas e aumentando a retenção.</p>
+<p>E temos um diferencial: oferecemos <strong>garantia de assertividade</strong> nas contratações. Se a escolha não der certo, fazemos a reposição sem custo.</p>
 
-<p>Gostaria de te mostrar como podemos apoiar o crescimento da {empresa} em apenas 15 minutos. Qual o melhor horário para você? Se preferir, é só agendar direto <a href="https://meetings.hubspot.com/joel-oliveira?uuid=3dae6946-5a35-483c-a5ce-f14e4c42ae76" style="color: #F5A623; font-weight: bold;">clicando na minha agenda</a>.</p>
+<p>Podemos ter uma conversa rápida de 15 minutos para eu te apresentar nosso projeto?</p>
 
-<p>Abraços,</p>
+<p>Me diga qual o melhor dia e horário para você ou, se preferir, <a href="https://meetings.hubspot.com/joel-oliveira?uuid=3dae6946-5a35-483c-a5ce-f14e4c42ae76" style="color: #F5A623; font-weight: bold; text-decoration: underline;">escolha direto aqui na minha agenda</a>.</p>
+
+<p>Abraço,</p>
 
 <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 13px; color: #333333; margin-top: 16px;">
   <tbody>

@@ -2,6 +2,7 @@ import hmac
 import os
 import smtplib
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -9,20 +10,23 @@ from flask import Flask, Response, render_template_string, request, jsonify
 import requests
 from dotenv import load_dotenv
 
-# Carrega as variáveis do arquivo .env (uso local). Em produção, vêm do painel da hospedagem.
+# Carrega as variáveis do arquivo .env. 
 load_dotenv()
 
-HUBSPOT_ACCESS_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN", "")
-APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "")
+# ==========================================
+# CONFIGURAÇÕES E CHAVES (Preencha aqui se o .env não funcionar)
+# ==========================================
+HUBSPOT_ACCESS_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN", "COLE_SUA_CHAVE_DO_HUBSPOT_AQUI_SE_PRECISAR")
+APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "COLE_SUA_CHAVE_DO_APOLLO_AQUI_SE_PRECISAR")
 
 JOEL_OWNER_ID = os.getenv("JOEL_OWNER_ID", "90392568")
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 JOEL_EMAIL_ADDRESS = os.getenv("JOEL_EMAIL_ADDRESS", "joel@startrh.io")
-JOEL_EMAIL_PASSWORD = os.getenv("JOEL_EMAIL_PASSWORD", "")
+JOEL_EMAIL_PASSWORD = os.getenv("JOEL_EMAIL_PASSWORD", "COLE_SUA_SENHA_DE_APP_AQUI_SE_PRECISAR")
 
-# Login do painel (HTTP Basic Auth)
+# Login do painel (Opcional - deixe vazio para acessar direto rodando local)
 APP_USER = os.getenv("APP_USER", "")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
@@ -37,8 +41,9 @@ HEADERS_APOLLO = {
     "x-api-key": APOLLO_API_KEY,
 }
 
-# TEMPLATE DE E-MAIL
-
+# ==========================================
+# TEMPLATE DE E-MAIL (HTML)
+# ==========================================
 EMAIL_ASSUNTO = "{empresa} + START RH - Parceria Estratégica em Recrutamento e Seleção"
 EMAIL_CORPO_HTML = """
 <p>Olá {nome}, tudo bem?</p>
@@ -78,6 +83,9 @@ EMAIL_CORPO_HTML = """
 </table>
 """
 
+# ==========================================
+# FUNÇÕES DE LÓGICA E APIS
+# ==========================================
 def limpar_dominio(url: str) -> str:
     if not url:
         return ""
@@ -95,7 +103,7 @@ def adicionar_dias_uteis(data_inicial, dias_uteis_prazo):
     return data_atual
 
 def disparar_email_joel(email_destino, nome_contato, nome_empresa):
-    if not JOEL_EMAIL_PASSWORD:
+    if not JOEL_EMAIL_PASSWORD or JOEL_EMAIL_PASSWORD == "COLE_SUA_SENHA_DE_APP_AQUI_SE_PRECISAR":
         return False, "E-mail não configurado"
     try:
         assunto = EMAIL_ASSUNTO.format(nome=nome_contato, empresa=nome_empresa)
@@ -232,11 +240,11 @@ def registrar_email_enviado_no_hubspot(contact_id, assunto, corpo_html):
     requests.post(url, headers=HEADERS_HUBSPOT, json=payload)
 
 def buscar_contatos_apollo(termo_empresa, limite=3):
-    if not APOLLO_API_KEY:
-        return [], "ERRO CRÍTICO: Chave de API do Apollo ausente no .env!", True
+    if not APOLLO_API_KEY or APOLLO_API_KEY == "COLE_SUA_CHAVE_DO_APOLLO_AQUI_SE_PRECISAR":
+        return [], "ERRO CRÍTICO: Chave de API do Apollo ausente no .env ou no código!", True
 
     url = "https://api.apollo.io/v1/mixed_people/api_search"
-    termo_limpo = limpar_dominio(termo_empresa) if "." in termo_empresa else termo_empresa.strip()
+    termo_limpo = limpar_dominio(str(termo_empresa)) if "." in str(termo_empresa) else str(termo_empresa).strip()
 
     payload = {
         "api_key": APOLLO_API_KEY,
@@ -300,26 +308,25 @@ def buscar_contatos_apollo(termo_empresa, limite=3):
         return [], f"Falha de conexão com Apollo: {str(e)}", True
 
 
+# ==========================================
+# SERVIDOR FLASK E FRONTEND
+# ==========================================
 app = Flask(__name__)
 
-
 def _pedir_login():
-    return Response(
-        "Acesso restrito.", 401, {"WWW-Authenticate": 'Basic realm="Start RH - Painel BDR"'}
-    )
-
+    return Response("Acesso restrito.", 401, {"WWW-Authenticate": 'Basic realm="Start RH - Painel BDR"'})
 
 @app.before_request
 def exigir_login():
-    if not APP_USER or not APP_PASSWORD:
-        return Response("Servidor sem APP_USER/APP_PASSWORD configurados.", 503)
-    auth = request.authorization
-    if not auth:
-        return _pedir_login()
-    user_ok = hmac.compare_digest(auth.username or "", APP_USER)
-    pass_ok = hmac.compare_digest(auth.password or "", APP_PASSWORD)
-    if not (user_ok and pass_ok):
-        return _pedir_login()
+    # Só exige senha se APP_USER e APP_PASSWORD estiverem preenchidos no ambiente
+    if APP_USER and APP_PASSWORD:
+        auth = request.authorization
+        if not auth:
+            return _pedir_login()
+        user_ok = hmac.compare_digest(auth.username or "", APP_USER)
+        pass_ok = hmac.compare_digest(auth.password or "", APP_PASSWORD)
+        if not (user_ok and pass_ok):
+            return _pedir_login()
 
 
 HTML_TEMPLATE = """
@@ -361,9 +368,9 @@ HTML_TEMPLATE = """
 
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">
-                    Quantidade de contatos desejada por empresa:
+                    Quantidade máxima de contatos desejada por empresa:
                 </label>
-                <input type="number" id="limiteInput" value="3" min="1" max="1000"
+                <input type="number" id="limiteInput" value="3" min="1" max="100"
                     class="w-32 bg-gray-900 border border-gray-700 rounded-lg p-2 text-gray-100 focus:outline-none focus:border-amber-500 transition font-mono text-sm">
             </div>
 
@@ -413,7 +420,7 @@ HTML_TEMPLATE = """
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Erro ${response.status} no servidor: ${errorText.substring(0, 150)}`);
+                    throw new Error(`Erro ${response.status} no servidor. Veja o terminal para mais detalhes.`);
                 }
                 
                 const data = await response.json();
@@ -440,7 +447,7 @@ HTML_TEMPLATE = """
                                 htmlItem += `<li class="flex items-center justify-between text-gray-300 bg-gray-800/50 p-2 rounded">
                                     <div>
                                         <strong class="text-gray-100">${c.nome} ${c.sobrenome}</strong> (${c.cargo}) - <span class="text-gray-400">${c.email}</span>
-                                        ${c.linkedin ? '<br><a href="' + c.linkedin + '" target="_blank" class="text-amber-500 underline mt-1 inline-block">LinkedIn</a>' : ''}
+                                        ${c.linkedin ? '<br><a href="' + c.linkedin + '" target="_blank" class="text-amber-500 underline mt-1 inline-block"><i class="fa-brands fa-linkedin"></i> LinkedIn</a>' : ''}
                                     </div>
                                     <div class="text-right">
                                         ${c.email_enviado 
@@ -480,6 +487,12 @@ def api_enriquecer():
     try:
         data = request.json or {}
         empresas_raw = data.get("empresas", "")
+        
+        # Tratamento de segurança caso o campo empresas venha em formato de lista em vez de texto
+        if isinstance(empresas_raw, list):
+            empresas_raw = ",".join([str(item) for item in empresas_raw])
+        elif not isinstance(empresas_raw, str):
+            empresas_raw = str(empresas_raw)
         
         try:
             limite = max(1, int(data.get("limite", 3)))
@@ -527,7 +540,11 @@ def api_enriquecer():
                     enviou, msg_status = disparar_email_joel(c["email"], nome_contato, nome_empresa)
                     
                     if enviou:
-                        registrar_email_enviado_no_hubspot(contact_id, EMAIL_ASSUNTO.format(nome=nome_contato, empresa=nome_empresa), EMAIL_CORPO_HTML.format(nome=nome_contato, empresa=nome_empresa))
+                        registrar_email_enviado_no_hubspot(
+                            contact_id, 
+                            EMAIL_ASSUNTO.format(nome=nome_contato, empresa=nome_empresa), 
+                            EMAIL_CORPO_HTML.format(nome=nome_contato, empresa=nome_empresa)
+                        )
 
                     criar_cadencia_tarefas_hubspot(
                         contact_id=contact_id,
@@ -555,11 +572,18 @@ def api_enriquecer():
             })
 
         return jsonify({"status": "success", "resultados": resultados})
+
     except Exception as e:
+        # Se ocorrer um erro 500, isto vai imprimir exatamente a causa no terminal para descobrirmos
+        print("\n--- ERRO DETECTADO NO BACKEND ---")
+        traceback.print_exc()
+        print("----------------------------------\n")
         return jsonify({"status": "error", "message": f"Erro de execução no backend: {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     porta = int(os.getenv("PORT", "5000"))
     print("\n--- SERVIDOR LOCAL DA START RH INICIADO ---")
     print(f"Acesse no navegador: http://localhost:{porta}\n")
-    app.run(host="127.0.0.1", port=porta, debug=False)
+    # debug=True ativado para ajudar a ver qualquer problema futuro no terminal
+    app.run(host="127.0.0.1", port=porta, debug=True)
